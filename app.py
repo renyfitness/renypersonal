@@ -475,7 +475,11 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
     if modo_rectificador == "Yo lo escojo":
         modelo_rectificador = st.selectbox("**Selecciona un modelo:**", list(rectificadores.keys()))
     else:
-        modelo_rectificador = next((modelo for modelo, datos in rectificadores.items() if datos["corriente"] >= corriente_total), "Universal UCP-100")
+        modelo_rectificador = min(
+    (modelo for modelo, datos in rectificadores.items() if datos["corriente"] >= corriente_total),
+    key=lambda m: rectificadores[m]["corriente"] - corriente_total,
+    default="Universal UCP-100"
+)
         st.success(f"**Rectificador recomendado: {modelo_rectificador}**")
     datos_rect = rectificadores[modelo_rectificador]
 
