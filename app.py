@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import numpy as np
 
 st.set_page_config(page_title="Calculador de Ánodos", layout="centered")
 
@@ -352,8 +353,23 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
     st.header("⚡ Diseño de Sistema ICCP")
 
     # Paso 1: Parámetros base
-    st.markdown('<span style="color:white; font-weight:bold;">Área sumergida total a proteger (m²):</span>', unsafe_allow_html=True)
-    area = st.number_input("", min_value=0.0, step=0.01)
+    # NUEVO: Selección de método para ingresar el área
+    st.markdown("### 🧱 Selección de método para ingresar áreas")
+    metodo_area = st.radio(
+        "**¿Cómo deseas ingresar el área a proteger?**",
+        ["Área total sumergida", "Dividir por zonas"]
+    )
+
+    if metodo_area == "Área total sumergida":
+        area = st.number_input("Área total sumergida (m²):", min_value=0.0, step=0.01)
+        area_splash = area_seca = 0
+        area_sumergida = area
+    else:
+        area_seca = st.number_input("Área de zona seca (m²):", min_value=0.0, step=0.01)
+        area_splash = st.number_input("Área de splash zone (m²):", min_value=0.0, step=0.01)
+        area_sumergida = st.number_input("Área de zona sumergida (m²):", min_value=0.0, step=0.01)
+        area = area_seca + area_splash + area_sumergida
+
     st.markdown('<span style="color:white; font-weight:bold;">¿La estructura está recubierta?</span>', unsafe_allow_html=True)
     recubrimiento = st.radio("", ("Sí", "No"))
     st.markdown('<span style="color:white; font-weight:bold;">Salinidad del agua:</span>', unsafe_allow_html=True)
@@ -407,25 +423,15 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
         densidad_iccp = 0.05  # agua brackish sin recubrimiento
      else:
         densidad_iccp = 0.1  # agua salada sin recubrimiento
-    corriente_total = area * densidad_iccp
-    st.markdown("### 🧱 Selección de método para ingresar áreas")
-
-    modo_area = st.radio(
-    "**¿Cómo deseas ingresar el área?**",
-    ["Solo área sumergida total", "Dividir por zonas (seca, splash, sumergida)"]
-    )
-
-    if modo_area == "Solo área sumergida total":
-        st.info("Usando el área total ya ingresada en los parámetros anteriores.")
-        area_splash = area_seca = 0
-        area_sumergida = area
-
+     # Cálculo de corriente con factor splash
+    factor_splash = 0.5
+    if metodo_area == "Dividir por zonas":
+        area_efectiva = area_sumergida + factor_splash * area_splash
     else:
-        area_seca = st.number_input("Área de la zona seca (m²):", min_value=0.0, step=0.01)
-        area_splash = st.number_input("Área de la splash zone (m²):", min_value=0.0, step=0.01)
-        area_sumergida = st.number_input("Área de la zona sumergida (m²):", min_value=0.0, step=0.01)
-        area = area_seca + area_splash + area_sumergida
+        area_efectiva = area
 
+    corriente_total = area_efectiva * densidad_iccp
+   
     zonas = ["Zona seca", "Splash zone", "Zona sumergida"]
     distribucion = [
     area_seca * densidad_iccp,
@@ -487,6 +493,7 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
     st.markdown("---")
     st.subheader("🔩 Selección de Ánodo Inerte")
     anodos_iccp = {
+        "Durichlor D51": {"corriente": 2.0, "vida": 30},
         "MMO": {"corriente": 2.5, "vida": 40},
         "Magnetita": {"corriente": 1.5, "vida": 20},
         "Grafito": {"corriente": 1.2, "vida": 15},
@@ -577,37 +584,86 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
              "Una eficiencia baja puede indicar un sobredimensionamiento o mala distribución del sistema."
          )
 
+    st.markdown("---")
+
+    st.markdown("### 🔥 Mapa Térmico de Distribución de Corriente")
+
+    # Parámetros del área (estructura protegida)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        ancho_estructura = st.number_input("Ancho de la estructura (m)", value=10.0)
+    with col2:
+        alto_estructura = st.number_input("Altura de la estructura (m)", value=12.0)
+    with col3:
+        distancia_horizontal_anodo = st.number_input("Distancia horizontal del ánodo (m)", value=3.0, min_value=0.0)
+
+    distancia_vertical_anodo = st.number_input("Distancia vertical del ánodo (m)", value=1.0, min_value=0.0)
+
+    # Coordenadas del ánodo en el centro de la estructura
+    anodo_x = ancho_estructura / 2 - distancia_horizontal_anodo
+    anodo_y = -distancia_vertical_anodo
+
+    # Corriente total real del sistema ICCP
+    corriente_total_iccp = datos_anodo["corriente"] * numero_anodos  # A
+    st.markdown("### 🔍 Verificación de corriente utilizada para el mapa térmico")
+    st.write("🔢 Número de ánodos:", numero_anodos)
+    st.write("⚡ Corriente por ánodo (A):", datos_anodo["corriente"])
+    st.write("🔋 Corriente total ICCP (A):", corriente_total_iccp)
+
+    # Crear grilla
+    res = 100
+    x = np.linspace(0, ancho_estructura, res)
+    y = np.linspace(0, alto_estructura, res)
+    X, Y = np.meshgrid(x, y)
+
+    # Calcular densidad estimada de corriente
+    Z = (corriente_total_iccp * 1000) / (np.sqrt((X - anodo_x)**2 + (Y - anodo_y)**2) + 0.5)
+
+    # Mapa térmico
+    fig, ax = plt.subplots()
+    heatmap = ax.pcolormesh(X, Y, Z, shading='auto', cmap='plasma')
+    cbar = plt.colorbar(heatmap, ax=ax)
+    cbar.set_label("Densidad estimada de corriente (mA/m²)")
+    ax.set_title("Distribución de Corriente sobre la Superficie Protegida")
+    ax.set_xlabel("Ancho de la estructura (m)")
+    ax.set_ylabel("Altura de la estructura (m)")
+
+    st.pyplot(fig)
+
     # Bloque visual con fórmulas
     st.markdown(f"""
     <div style='background-color: #2a2a2a; padding: 15px; border-radius: 10px; color: white;'>
     <b>1. Densidad de corriente (J):</b><br>
     <span style='font-family: monospace; font-size: 18px;'>J = {densidad_iccp:.3f} A/m²</span><br>
 
-    <b>2. Corriente total requerida (I):</b><br>
+    <b>2. Corriente por ánodo:</b><br>
+    <span style='font-family: monospace; font-size: 18px; font-weight: bold;'>I_anodo = {datos_anodo["corriente"]:.2f} A</span><br>
+
+    <b>3. Corriente total requerida (I):</b><br>
     $$ I = A \\cdot J = {area:.2f} \\cdot {densidad_iccp:.3f} = {corriente_total:.2f}\\ \\text{{A}} $$<br>
 
-    <b>3. Carga total requerida (Q):</b><br>
+    <b>4. Carga total requerida (Q):</b><br>
     $$ Q = I \\cdot t = {corriente_total:.2f} \\cdot {vida_util} \\cdot 365 \\cdot 24 = {carga_total:.2f}\\ \\text{{Ah}} $$<br>
 
-    <b>4. Eficiencia del sistema:</b><br>
+    <b>5. Eficiencia del sistema:</b><br>
     $$ \\eta = \\frac{{I_{{usada}}}}{{I_{{máxima}}}} \\cdot 100 = \\frac{{{corriente_total:.2f}}}{{{datos_rect["corriente"]}}} \\cdot 100 = {eficiencia_sistema:.1f}\\% $$<br>
     
-    <b>5. Número de ánodos requeridos:</b><br>
+    <b>6. Número de ánodos requeridos:</b><br>
     $$ N = \\left\\lceil \\frac{{I}}{{I_{{anodo}}}} \\right\\rceil = \\left\\lceil \\frac{{{corriente_total:.2f}}}{{{datos_anodo["corriente"]}}} \\right\\rceil = {numero_anodos} $$<br>
 
-    <b>6. Resistencia del ánodo (Rᴀ):</b><br>
+    <b>7. Resistencia del ánodo (Rᴀ):</b><br>
     $$ R_{{anodo}} = {resistencia_anodo:.2f}\\ \\Omega $$<br>
 
-    <b>7. Resistencia del electrolito (Rₑ):</b><br>
+    <b>8. Resistencia del electrolito (Rₑ):</b><br>
     $$ R_{{electrolito}} = \\frac{{\\rho}}{{4 \\pi d}} = \\frac{{{resistividad}}}{{4 \\pi \\cdot {distancia}}} = {resistencia_electrolito:.2f}\\ \\Omega $$<br>
 
-    <b>8. Resistencia total:</b><br>
+    <b>9. Resistencia total:</b><br>
     $$ R_{{total}} = R_{{anodo}} + R_{{electrolito}} = {resistencia_total:.2f}\\ \\Omega $$<br>
 
-    <b>9. Voltaje requerido:</b><br>
+    <b>10. Voltaje requerido:</b><br>
     $$ V = I \\cdot R_{{total}} = {corriente_total:.2f} \\cdot {resistencia_total:.2f} = {voltaje_requerido:.2f}\\ \\text{{V}} $$<br>
 
-    <b>10. Distancia estructura-ánodo:</b><br>
+    <b>11. Distancia estructura-ánodo:</b><br>
     $$ d = {distancia}\\ \\text{{m}} $$
     </div>
     """, unsafe_allow_html=True)
