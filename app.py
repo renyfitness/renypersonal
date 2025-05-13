@@ -374,6 +374,8 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
     recubrimiento = st.radio("", ("Sí", "No"))
     st.markdown('<span style="color:white; font-weight:bold;">Salinidad del agua:</span>', unsafe_allow_html=True)
     salinidad = st.number_input("", min_value=0.0, step=0.1)
+    resistividad = 1000 / (salinidad + 1)  # Ω·cm
+    resistividad_metros = resistividad * 0.01  # Ω·m
     st.markdown('<span style="color:white; font-weight:bold;">Vida útil deseada (años):</span>', unsafe_allow_html=True)
     vida_util = st.number_input("", min_value=1, value=10)
 
@@ -431,7 +433,13 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
         area_efectiva = area
 
     corriente_total = area_efectiva * densidad_iccp
-   
+
+    # Cálculo de distancia sugerida estructura-ánodo para ICCP
+    potencial_minimo = -0.85  # V
+    corriente_anodo = datos_anodo["corriente"]  # A (por defecto, puede cambiarse según tipo de ánodo seleccionado)
+    sigma = 1 / resistividad_metros  # S/m
+    distancia_sugerida = corriente_anodo / (4 * np.pi * sigma * abs(potencial_minimo))
+
     zonas = ["Zona seca", "Splash zone", "Zona sumergida"]
     distribucion = [
     area_seca * densidad_iccp,
@@ -543,10 +551,8 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     st.markdown("### 🔋 Cálculos Detallados - Sistema ICCP")
 
     resistencia_anodo = 0.5  # Ω por defecto (puedes adaptar esta fórmula según tipo)
-    resistividad = 20  # Ω·m, valor típico para agua de mar (ajustable)
-    distancia = 2  # m, distancia estimada entre ánodo y estructura (ajustable)
-
-    resistencia_electrolito = resistividad / (4 * math.pi * distancia)
+    
+    resistencia_electrolito = resistividad_metros / (4 * math.pi * distancia_sugerida)
     resistencia_total = resistencia_anodo + resistencia_electrolito
     voltaje_requerido = corriente_total * resistencia_total
     eficiencia_sistema = (corriente_total / datos_rect["corriente"]) * 100
@@ -591,7 +597,7 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     # Parámetros del área (estructura protegida)
     col1, col2, col3 = st.columns(3)
     with col1:
-        ancho_estructura = st.number_input("Ancho de la estructura (m)", value=10.0)
+        largo_estructura = st.number_input("Largo de la estructura (m)", value=10.0)
     with col2:
         alto_estructura = st.number_input("Altura de la estructura (m)", value=12.0)
     with col3:
@@ -600,7 +606,7 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     distancia_vertical_anodo = st.number_input("Distancia vertical del ánodo (m)", value=1.0, min_value=0.0)
 
     # Coordenadas del ánodo en el centro de la estructura
-    anodo_x = ancho_estructura / 2 - distancia_horizontal_anodo
+    anodo_x = largo_estructura / 2 - distancia_horizontal_anodo
     anodo_y = -distancia_vertical_anodo
 
     # Corriente total real del sistema ICCP
@@ -612,7 +618,7 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
 
     # Crear grilla
     res = 100
-    x = np.linspace(0, ancho_estructura, res)
+    x = np.linspace(0, largo_estructura, res)
     y = np.linspace(0, alto_estructura, res)
     X, Y = np.meshgrid(x, y)
 
@@ -625,7 +631,7 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     cbar = plt.colorbar(heatmap, ax=ax)
     cbar.set_label("Densidad estimada de corriente (mA/m²)")
     ax.set_title("Distribución de Corriente sobre la Superficie Protegida")
-    ax.set_xlabel("Ancho de la estructura (m)")
+    ax.set_xlabel("Largo de la estructura (m)")
     ax.set_ylabel("Altura de la estructura (m)")
 
     st.pyplot(fig)
@@ -655,7 +661,7 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     $$ R_{{anodo}} = {resistencia_anodo:.2f}\\ \\Omega $$<br>
 
     <b>8. Resistencia del electrolito (Rₑ):</b><br>
-    $$ R_{{electrolito}} = \\frac{{\\rho}}{{4 \\pi d}} = \\frac{{{resistividad}}}{{4 \\pi \\cdot {distancia}}} = {resistencia_electrolito:.2f}\\ \\Omega $$<br>
+    $$ R_{{electrolito}} = \\frac{{\\rho}}{{4 \\pi d}} = \\frac{{{resistividad_metros}}}{{4 \\pi \\cdot {distancia_sugerida:.2f}}} = {resistencia_electrolito:.2f}\\ \\Omega $$<br>
 
     <b>9. Resistencia total:</b><br>
     $$ R_{{total}} = R_{{anodo}} + R_{{electrolito}} = {resistencia_total:.2f}\\ \\Omega $$<br>
@@ -664,7 +670,7 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     $$ V = I \\cdot R_{{total}} = {corriente_total:.2f} \\cdot {resistencia_total:.2f} = {voltaje_requerido:.2f}\\ \\text{{V}} $$<br>
 
     <b>11. Distancia estructura-ánodo:</b><br>
-    $$ d = {distancia}\\ \\text{{m}} $$
+    $$ d = {distancia_sugerida}\\ \\text{{m}} $$
     </div>
     """, unsafe_allow_html=True)
 
