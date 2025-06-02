@@ -434,12 +434,6 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
 
     corriente_total = area_efectiva * densidad_iccp
 
-    # Cálculo de distancia sugerida estructura-ánodo para ICCP
-    potencial_minimo = -0.85  # V
-    corriente_anodo = datos_anodo["corriente"]  # A (por defecto, puede cambiarse según tipo de ánodo seleccionado)
-    sigma = 1 / resistividad_metros  # S/m
-    distancia_sugerida = corriente_anodo / (4 * np.pi * sigma * abs(potencial_minimo))
-
     zonas = ["Zona seca", "Splash zone", "Zona sumergida"]
     distribucion = [
     area_seca * densidad_iccp,
@@ -516,7 +510,7 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
         st.success(f"**Ánodo recomendado: {tipo_anodo}**")
     datos_anodo = anodos_iccp[tipo_anodo]
     numero_anodos = math.ceil(corriente_total / datos_anodo["corriente"])
-
+    
     # Paso 4: Recomendación de cable
     st.markdown("---")
     st.subheader("🧵 Recomendación de Cableado")
@@ -549,6 +543,12 @@ elif tipo_sistema == "Corriente impresa (ICCP)":
 # Mostrar cálculos ICCP reorganizados
 if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     st.markdown("### 🔋 Cálculos Detallados - Sistema ICCP")
+
+   # Cálculo de distancia sugerida estructura-ánodo para ICCP
+    potencial_minimo = -0.85  # V
+    corriente_anodo = datos_anodo["corriente"]  # A (por defecto, puede cambiarse según tipo de ánodo seleccionado)
+    sigma = 1 / resistividad_metros  # S/m
+    distancia_sugerida = max(1.0, corriente_anodo / (4 * np.pi * sigma * abs(potencial_minimo)))
 
     resistencia_anodo = 0.5  # Ω por defecto (puedes adaptar esta fórmula según tipo)
     
@@ -691,3 +691,4 @@ if tipo_sistema == "Corriente impresa (ICCP)" and area > 0:
     
 - _**Electrodo de referencia:**_ **{tipo_electrodo}**
 """)
+
